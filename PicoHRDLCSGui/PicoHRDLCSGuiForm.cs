@@ -21,7 +21,6 @@ using PicoHRDLImports;
 using System;
 using System.IO;
 using System.Linq;
-using System.Net.Mail;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -266,7 +265,7 @@ namespace PicoHRDLGui
                 {
                     scaledTime[n] = time[n];
                     scaledData[n] = adcToMv(data[n], (short)Imports.HRDLRange.HRDL_2500_MV, maxAdc);
-                    channel1DataTextBox.Text += "Time: " + time[n] +  "\tRaw: " + data[n] + "\tScaled: " + scaledData[n] + "\r\n";
+                    channel1DataTextBox.Text += "Time: " + time[n] + "\tRaw: " + data[n] + "\tScaled: " + scaledData[n] + "\r\n";
                 }
 
                 channel1DataTextBox.Text += "X: " + scaledTime.Length + "\tY: " + scaledData.Length + "\r\n";
@@ -279,7 +278,7 @@ namespace PicoHRDLGui
             }
         }
 
-        private static Tuple<float[], float[]> liveResult = new Tuple<float[], float[]>(null,null);
+        private static Tuple<float[], float[]> liveResult = new Tuple<float[], float[]>(null, null);
         private rawInfo rawi;
         private void btnLive_Click(object sender, EventArgs e)
         {
@@ -306,7 +305,7 @@ namespace PicoHRDLGui
         {
             var tempresult = driverthread.collectLive(handle, 10);
             liveResult = Tuple.Create(appendArray(liveResult.Item1, tempresult.Item1), appendArray(liveResult.Item2, tempresult.Item2));
-            for (int i=0; i< tempresult.Item1.Length; i++)
+            for (int i = 0; i < tempresult.Item1.Length; i++)
             {
                 scatterlist.Add(tempresult.Item1[i], tempresult.Item2[i]);
             }
@@ -339,7 +338,7 @@ namespace PicoHRDLGui
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            if (liveResult.Item1.Length > 0)
+            if (liveResult != null)
             {
                 ResultFile Resultobj = new ResultFile(liveResult, rawi);
 
@@ -351,16 +350,28 @@ namespace PicoHRDLGui
                 {
                     if ((savestream = sfd.OpenFile()) != null)
                     {
+                        // 使用Settings.Default["FileTextOrBinary"]记录存储模式
+                        // text - 文本模式
+                        // bin - binary模式
+                        // 默认为binary
+                        /*if ((string)Properties.Settings.Default["FileTextOrBinary"] == "text")
+                        {*/
                         StreamWriter sw = new StreamWriter(savestream);
-                        string js = JsonConvert.SerializeObject(Resultobj);
-                        JsonSerializer jslz = new JsonSerializer();
-                        sw.WriteLine(js);
-                        sw.Close();
-                        savestream.Close();
-                    }
-                    else 
-                    {
-                        MessageBox.Show("Error writing to file. ");
+                            string js = JsonConvert.SerializeObject(Resultobj);
+                            JsonSerializer jslz = new JsonSerializer();
+                            sw.WriteLine(js);
+                            sw.Close();
+                            savestream.Close();
+                        /*}
+                        else
+                        {
+                            BinaryWriter bw = new BinaryWriter(savestream);
+                            string js = JsonConvert.SerializeObject(Resultobj);
+                            JsonSerializer jslz = new JsonSerializer();
+                            bw.Write(js);
+                            bw.Close();
+                            savestream.Close();
+                        }*/
                     }
                 }
             }
@@ -368,6 +379,36 @@ namespace PicoHRDLGui
             {
                 MessageBox.Show("No live result to write.");
             }
+        }
+
+        public bool IsBinary(string filePath, int requiredConsecutiveNul = 1)
+        {
+            const int charsToCheck = 8000;
+            const char nulChar = '\0';
+
+            int nulCount = 0;
+
+            using (var streamReader = new StreamReader(filePath))
+            {
+                for (var i = 0; i < charsToCheck; i++)
+                {
+                    if (streamReader.EndOfStream)
+                        return false;
+
+                    if ((char)streamReader.Read() == nulChar)
+                    {
+                        nulCount++;
+
+                        if (nulCount >= requiredConsecutiveNul)
+                            return true;
+                    }
+                    else
+                    {
+                        nulCount = 0;
+                    }
+                }
+            }
+            return false;
         }
 
         private void btnOpen_Click(object sender, EventArgs e)
@@ -379,20 +420,34 @@ namespace PicoHRDLGui
                 ofd.RestoreDirectory = true;
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
-                    using (var osr = new StreamReader(ofd.OpenFile()))
+                    /*
+                    if (IsBinary(ofd.ToString()))
                     {
-                        var osrout = osr.ReadToEnd();
-                        formsPlot1.Plot.Clear();
-                        scatterlist.Clear();
-                        ResultFile resultopenfile = JsonConvert.DeserializeObject<ResultFile>(osrout);
-                        scatterlist.AddRange(resultopenfile.rawTuple.Item1.Select(x => (double)x).ToArray(), resultopenfile.rawTuple.Item2.Select(x => (double)x).ToArray());
-                        formsPlot1.Plot.Add(scatterlist);
-                        formsPlot1.Refresh();
+                        using (var osr = new BinaryReader(ofd.OpenFile()))
+                        {
+                            var osrout = osr.ReadString();
+                            formsPlot1.Plot.Clear();
+                            scatterlist.Clear();
+                            ResultFile resultopenfile = JsonConvert.DeserializeObject<ResultFile>(osrout);
+                            scatterlist.AddRange(resultopenfile.rawTuple.Item1.Select(x => (double)x).ToArray(), resultopenfile.rawTuple.Item2.Select(x => (double)x).ToArray());
+                            formsPlot1.Plot.Add(scatterlist);
+                            formsPlot1.Refresh();
+                        }
                     }
-                }
-                else
-                {
-                    MessageBox.Show("Failed to open the file. ");
+                    else
+                    {
+                    */
+                        using (var osr = new StreamReader(ofd.OpenFile()))
+                        {
+                            var osrout = osr.ReadToEnd();
+                            formsPlot1.Plot.Clear();
+                            scatterlist.Clear();
+                            ResultFile resultopenfile = JsonConvert.DeserializeObject<ResultFile>(osrout);
+                            scatterlist.AddRange(resultopenfile.rawTuple.Item1.Select(x => (double)x).ToArray(), resultopenfile.rawTuple.Item2.Select(x => (double)x).ToArray());
+                            formsPlot1.Plot.Add(scatterlist);
+                            formsPlot1.Refresh();
+                        }
+                    //}
                 }
             }
         }
